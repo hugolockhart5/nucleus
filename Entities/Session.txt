@@ -1,0 +1,123 @@
+{
+  "name": "Session",
+  "type": "object",
+  "properties": {
+    "buyer_id": {
+      "type": "string",
+      "description": "User who booked the session"
+    },
+    "expert_id": {
+      "type": "string",
+      "description": "Expert ID from Expert entity"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending_payment",
+        "scheduled",
+        "in_progress",
+        "completed",
+        "cancelled",
+        "refunded"
+      ],
+      "default": "pending_payment"
+    },
+    "problem_title": {
+      "type": "string",
+      "description": "Structured problem title"
+    },
+    "problem_description": {
+      "type": "string",
+      "description": "Full problem description from buyer"
+    },
+    "problem_category": {
+      "type": "string",
+      "description": "AI-extracted category (e.g., pricing, growth, hiring)"
+    },
+    "problem_structured": {
+      "type": "object",
+      "description": "AI-extracted structured data (company size, tools, metrics, etc.)"
+    },
+    "urgency": {
+      "type": "string",
+      "enum": [
+        "asap",
+        "today",
+        "this_week"
+      ],
+      "default": "this_week"
+    },
+    "duration_minutes": {
+      "type": "number",
+      "enum": [
+        10,
+        20
+      ],
+      "description": "Session duration"
+    },
+    "scheduled_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Scheduled call time"
+    },
+    "price_gbp": {
+      "type": "number",
+      "description": "Total price paid by buyer"
+    },
+    "platform_fee_gbp": {
+      "type": "number",
+      "description": "Platform commission"
+    },
+    "expert_payout_gbp": {
+      "type": "number",
+      "description": "Amount paid to expert"
+    },
+    "stripe_payment_id": {
+      "type": "string"
+    },
+    "video_room_url": {
+      "type": "string",
+      "description": "Video call link"
+    },
+    "recording_url": {
+      "type": "string",
+      "description": "Call recording (if consented)"
+    },
+    "ai_summary": {
+      "type": "string",
+      "description": "AI-generated call summary"
+    },
+    "action_items": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "AI-extracted action items"
+    },
+    "expert_notes": {
+      "type": "string",
+      "description": "Expert-added notes to AI summary"
+    },
+    "buyer_rating": {
+      "type": "number",
+      "description": "1-5 star rating from buyer"
+    },
+    "buyer_feedback": {
+      "type": "string",
+      "description": "Qualitative feedback from buyer"
+    },
+    "problem_resolved": {
+      "type": "boolean",
+      "description": "Did this call resolve the issue?"
+    },
+    "nps_score": {
+      "type": "number",
+      "description": "0-10 NPS score from buyer"
+    }
+  },
+  "required": [
+    "buyer_id",
+    "problem_description",
+    "duration_minutes"
+  ]
+}

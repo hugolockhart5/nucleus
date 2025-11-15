@@ -1,0 +1,227 @@
+import React, { useState, useEffect } from "react";
+import { useNavigate, useLocation, Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { base44 } from "@/api/base44Client";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { 
+  CheckCircle,
+  Calendar,
+  Clock,
+  Video,
+  ArrowRight,
+  Sparkles
+} from "lucide-react";
+import { format } from "date-fns";
+
+export default function SessionConfirmed() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [session, setSession] = useState(null);
+  const [expert, setExpert] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const sessionId = location.state?.sessionId;
+        if (!sessionId) {
+          navigate(createPageUrl("Home"));
+          return;
+        }
+
+        const sessionData = await base44.entities.Session.filter({ id: sessionId });
+        const currentSession = sessionData[0];
+        setSession(currentSession);
+
+        if (currentSession.expert_id) {
+          const expertData = await base44.entities.Expert.filter({ id: currentSession.expert_id });
+          setExpert(expertData[0]);
+        }
+
+        setIsLoading(false);
+      } catch (error) {
+        console.error("Error loading confirmation data:", error);
+        navigate(createPageUrl("Home"));
+      }
+    };
+
+    loadData();
+  }, [location]);
+
+  if (isLoading || !session || !expert) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse">Loading...</div>
+      </div>
+    );
+  }
+
+  const scheduledDate = new Date(session.scheduled_time);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
+      <div className="max-w-4xl mx-auto pt-12">
+        <div className="text-center mb-8">
+          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce">
+            <CheckCircle className="w-12 h-12 text-green-600" />
+          </div>
+          <h1 className="text-4xl font-bold text-slate-900 mb-3">
+            You're all set!
+          </h1>
+          <p className="text-xl text-slate-600">
+            Your session with {expert.positioning} is confirmed
+          </p>
+        </div>
+
+        <Card className="shadow-2xl border-0 mb-8">
+          <CardContent className="p-8">
+            <div className="grid md:grid-cols-2 gap-6 mb-8">
+              <div className="flex gap-4">
+                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Calendar className="w-6 h-6 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500 mb-1">Date & Time</p>
+                  <p className="font-semibold text-slate-900">
+                    {format(scheduledDate, 'EEEE, MMMM d, yyyy')}
+                  </p>
+                  <p className="text-slate-700">
+                    {format(scheduledDate, 'h:mm a')} UK Time
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-4">
+                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Clock className="w-6 h-6 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500 mb-1">Duration</p>
+                  <p className="font-semibold text-slate-900">
+                    {session.duration_minutes} minutes
+                  </p>
+                  <p className="text-slate-700">
+                    Focused, structured call
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-4">
+                <div className="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Video className="w-6 h-6 text-amber-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500 mb-1">Format</p>
+                  <p className="font-semibold text-slate-900">
+                    Video call
+                  </p>
+                  <p className="text-slate-700">
+                    Link will be sent via email
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-4">
+                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Sparkles className="w-6 h-6 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500 mb-1">Expert</p>
+                  <p className="font-semibold text-slate-900">
+                    {expert.positioning}
+                  </p>
+                  <p className="text-slate-700 text-sm">
+                    {expert.expertise_areas?.slice(0, 2).join(', ')}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t pt-6">
+              <p className="text-sm text-slate-500 mb-2">Your Problem</p>
+              <p className="font-medium text-slate-900">{session.problem_title}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-lg border-0 mb-8 bg-gradient-to-br from-blue-50 to-blue-100">
+          <CardContent className="p-8">
+            <h2 className="text-xl font-bold text-slate-900 mb-6">What happens next?</h2>
+            <div className="space-y-4">
+              <div className="flex gap-4">
+                <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center flex-shrink-0 font-bold">
+                  1
+                </div>
+                <div>
+                  <p className="font-medium text-slate-900 mb-1">Check your email</p>
+                  <p className="text-slate-700 text-sm">
+                    We've sent you a confirmation with calendar invite and video call link
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-4">
+                <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center flex-shrink-0 font-bold">
+                  2
+                </div>
+                <div>
+                  <p className="font-medium text-slate-900 mb-1">Expert prepares</p>
+                  <p className="text-slate-700 text-sm">
+                    Your expert will review your problem and context before the call
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-4">
+                <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center flex-shrink-0 font-bold">
+                  3
+                </div>
+                <div>
+                  <p className="font-medium text-slate-900 mb-1">Join the call</p>
+                  <p className="text-slate-700 text-sm">
+                    Click the video link at your scheduled time (we'll send a reminder)
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-4">
+                <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center flex-shrink-0 font-bold">
+                  4
+                </div>
+                <div>
+                  <p className="font-medium text-slate-900 mb-1">Get AI summary</p>
+                  <p className="text-slate-700 text-sm">
+                    Within minutes after the call, receive notes, action items, and next steps
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <Link to={createPageUrl("MySessions")}>
+            <Button size="lg" className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto">
+              View My Sessions
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
+          </Link>
+          <Link to={createPageUrl("Home")}>
+            <Button size="lg" variant="outline" className="w-full sm:w-auto">
+              Book Another Session
+            </Button>
+          </Link>
+        </div>
+
+        <div className="text-center mt-12 text-sm text-slate-600">
+          <p>Need to reschedule or have questions?</p>
+          <p>
+            Email us at{" "}
+            <a href="mailto:support@nucleus.com" className="text-blue-600 hover:underline">
+              support@nucleus.com
+            </a>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,296 @@
+import React, { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { base44 } from "@/api/base44Client";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Calendar } from "@/components/ui/calendar";
+import { Label } from "@/components/ui/label";
+import { 
+  ArrowLeft, 
+  Calendar as CalendarIcon,
+  Clock,
+  CreditCard,
+  Loader2,
+  CheckCircle,
+  Sparkles,
+  Video
+} from "lucide-react";
+import { format, addDays, setHours, setMinutes } from "date-fns";
+
+export default function BookSession() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [session, setSession] = useState(null);
+  const [expert, setExpert] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedTime, setSelectedTime] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const { sessionId, expertId } = location.state || {};
+        if (!sessionId || !expertId) {
+          navigate(createPageUrl("Home"));
+          return;
+        }
+
+        const sessionData = await base44.entities.Session.filter({ id: sessionId });
+        const expertData = await base44.entities.Expert.filter({ id: expertId });
+        
+        setSession(sessionData[0]);
+        setExpert(expertData[0]);
+        setIsLoading(false);
+      } catch (error) {
+        console.error("Error loading booking data:", error);
+        navigate(createPageUrl("Home"));
+      }
+    };
+
+    loadData();
+  }, [location]);
+
+  const generateTimeSlots = () => {
+    const slots = [];
+    for (let hour = 9; hour <= 17; hour++) {
+      for (let minute of [0, 30]) {
+        const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+        slots.push(time);
+      }
+    }
+    return slots;
+  };
+
+  const timeSlots = generateTimeSlots();
+
+  const handleBooking = async () => {
+    if (!selectedTime) return;
+
+    setIsProcessing(true);
+    try {
+      const [hours, minutes] = selectedTime.split(':');
+      const scheduledDateTime = setMinutes(setHours(selectedDate, parseInt(hours)), parseInt(minutes));
+
+      const rate = session.duration_minutes === 10 ? expert.rate_10min : expert.rate_20min;
+      const platformFee = rate * 0.25;
+      const expertPayout = rate - platformFee;
+
+      await base44.entities.Session.update(session.id, {
+        expert_id: expert.id,
+        scheduled_time: scheduledDateTime.toISOString(),
+        price_gbp: rate,
+        platform_fee_gbp: platformFee,
+        expert_payout_gbp: expertPayout,
+        status: "scheduled"
+      });
+
+      await base44.entities.Expert.update(expert.id, {
+        total_sessions: (expert.total_sessions || 0) + 1
+      });
+
+      navigate(createPageUrl("SessionConfirmed"), { 
+        state: { sessionId: session.id } 
+      });
+    } catch (error) {
+      console.error("Error booking session:", error);
+      alert("There was an error booking your session. Please try again.");
+      setIsProcessing(false);
+    }
+  };
+
+  if (isLoading || !session || !expert) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-12 h-12 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  const rate = session.duration_minutes === 10 ? expert.rate_10min : expert.rate_20min;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
+      <div className="max-w-6xl mx-auto">
+        <Button
+          variant="ghost"
+          onClick={() => navigate(createPageUrl("ExpertMatch"), { state: { sessionId: session.id } })}
+          className="mb-6"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to experts
+        </Button>
+
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-slate-900 mb-2">
+            Book your session
+          </h1>
+          <p className="text-slate-600">
+            Choose a time that works for you
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-6">
+          <div className="md:col-span-2 space-y-6">
+            <Card className="shadow-lg border-0">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CalendarIcon className="w-5 h-5 text-blue-600" />
+                  Select Date & Time
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div>
+                  <Label className="mb-3 block">Choose a date</Label>
+                  <div className="border rounded-lg p-4 bg-white">
+                    <Calendar
+                      mode="single"
+                      selected={selectedDate}
+                      onSelect={setSelectedDate}
+                      disabled={(date) => date < new Date() || date > addDays(new Date(), 30)}
+                      className="mx-auto"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="mb-3 block">Choose a time (UK Time)</Label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {timeSlots.map((time) => (
+                      <Button
+                        key={time}
+                        variant={selectedTime === time ? "default" : "outline"}
+                        onClick={() => setSelectedTime(time)}
+                        className={selectedTime === time ? "bg-blue-600" : ""}
+                      >
+                        {time}
+                      </Button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-3">
+                    Note: This is a simplified calendar. In production, we'll sync with expert availability and your calendar.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-lg border-0">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CreditCard className="w-5 h-5 text-blue-600" />
+                  Payment
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-slate-700">Session ({session.duration_minutes} min)</span>
+                    <span className="text-2xl font-bold text-slate-900">£{rate}</span>
+                  </div>
+                  <p className="text-sm text-slate-600 mb-6">
+                    Includes AI-generated call summary and action items
+                  </p>
+                  <Button
+                    onClick={handleBooking}
+                    disabled={!selectedTime || isProcessing}
+                    size="lg"
+                    className="w-full bg-blue-600 hover:bg-blue-700"
+                  >
+                    {isProcessing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        Confirm & Pay £{rate}
+                        <CheckCircle className="w-4 h-4 ml-2" />
+                      </>
+                    )}
+                  </Button>
+                  <p className="text-xs text-center text-slate-500 mt-3">
+                    Note: MVP uses simplified payment. Production will integrate Stripe.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="space-y-6">
+            <Card className="shadow-lg border-0 sticky top-6">
+              <CardHeader>
+                <CardTitle className="text-lg">Session Summary</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <p className="text-sm text-slate-500 mb-1">Expert</p>
+                  <p className="font-semibold text-slate-900">{expert.positioning}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500 mb-1">Your Problem</p>
+                  <p className="text-sm text-slate-700">{session.problem_title}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-sm text-slate-500 mb-1">Duration</p>
+                    <Badge variant="outline">
+                      <Clock className="w-3 h-3 mr-1" />
+                      {session.duration_minutes}m
+                    </Badge>
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-500 mb-1">Format</p>
+                    <Badge variant="outline">
+                      <Video className="w-3 h-3 mr-1" />
+                      Video call
+                    </Badge>
+                  </div>
+                </div>
+                {selectedDate && selectedTime && (
+                  <div className="pt-4 border-t">
+                    <p className="text-sm text-slate-500 mb-1">Scheduled for</p>
+                    <p className="font-semibold text-slate-900">
+                      {format(selectedDate, 'EEE, MMM d, yyyy')}
+                    </p>
+                    <p className="text-slate-700">{selectedTime}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-lg border-0 bg-gradient-to-br from-green-50 to-emerald-50">
+              <CardContent className="p-6">
+                <div className="flex items-start gap-2">
+                  <Sparkles className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <h3 className="font-semibold text-slate-900 mb-2">What's included</h3>
+                    <ul className="space-y-2 text-sm text-slate-700">
+                      <li className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                        <span>Expert reviews your problem before the call</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                        <span>Focused {session.duration_minutes}-minute video call</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                        <span>AI-generated summary & action items</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                        <span>Email follow-up template</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

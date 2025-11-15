@@ -1,0 +1,295 @@
+import React, { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { base44 } from "@/api/base44Client";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { 
+  ArrowLeft, 
+  Star,
+  Clock,
+  CheckCircle,
+  Loader2,
+  Sparkles
+} from "lucide-react";
+
+export default function ExpertMatch() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [session, setSession] = useState(null);
+  const [experts, setExperts] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const sessionId = location.state?.sessionId;
+        if (!sessionId) {
+          navigate(createPageUrl("Home"));
+          return;
+        }
+
+        const sessionData = await base44.entities.Session.filter({ id: sessionId });
+        const currentSession = sessionData[0];
+        setSession(currentSession);
+
+        const allExperts = await base44.entities.Expert.filter({ 
+          status: "approved"
+        });
+
+        if (allExperts.length === 0) {
+          setExperts([]);
+          setIsLoading(false);
+          return;
+        }
+
+        const matchResult = await base44.integrations.Core.InvokeLLM({
+          prompt: `You are matching a user's problem with the best experts.
+
+Problem: "${currentSession.problem_title}"
+Category: "${currentSession.problem_category}"
+Description: "${currentSession.problem_description}"
+
+Available experts:
+${allExperts.map((e, i) => `
+Expert ${i + 1}:
+- Positioning: ${e.positioning}
+- Expertise: ${e.expertise_areas?.join(', ')}
+- Example problems: ${e.example_problems?.join('; ')}
+- Sessions: ${e.total_sessions || 0}
+- Rating: ${e.average_rating || 'N/A'}
+`).join('\n')}
+
+Return the IDs of the top 3 best-matched experts in order, with a brief reason why each is a good match.`,
+          response_json_schema: {
+            type: "object",
+            properties: {
+              matches: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    expert_index: { type: "number" },
+                    reason: { type: "string" }
+                  }
+                }
+              }
+            }
+          }
+        });
+
+        const matchedExperts = matchResult.matches
+          .slice(0, 3)
+          .map(m => ({
+            ...allExperts[m.expert_index],
+            match_reason: m.reason
+          }))
+          .filter(e => e.id);
+
+        setExperts(matchedExperts.length > 0 ? matchedExperts : allExperts.slice(0, 3));
+        setIsLoading(false);
+      } catch (error) {
+        console.error("Error loading match data:", error);
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, [location]);
+
+  const handleSelectExpert = (expert) => {
+    navigate(createPageUrl("BookSession"), { 
+      state: { 
+        sessionId: session.id,
+        expertId: expert.id 
+      } 
+    });
+  };
+
+  if (isLoading || !session) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-slate-600">Finding the perfect experts for you...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
+      <div className="max-w-6xl mx-auto">
+        <Button
+          variant="ghost"
+          onClick={() => navigate(createPageUrl("ProblemSubmit"))}
+          className="mb-6"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back
+        </Button>
+
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-slate-900 mb-2">
+            Your matched experts
+          </h1>
+          <p className="text-slate-600 text-lg">
+            {session.problem_title}
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-6">
+          <div className="md:col-span-2 space-y-4">
+            {experts.length === 0 ? (
+              <Card className="shadow-lg border-0">
+                <CardContent className="p-12 text-center">
+                  <p className="text-slate-600 mb-4">
+                    No experts available right now. We're growing our expert network.
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => navigate(createPageUrl("Home"))}
+                  >
+                    Back to Home
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              experts.map((expert, index) => (
+                <Card 
+                  key={expert.id}
+                  className="shadow-lg border-0 hover:shadow-xl transition-shadow cursor-pointer"
+                  onClick={() => handleSelectExpert(expert)}
+                >
+                  <CardContent className="p-6">
+                    <div className="flex gap-4">
+                      <div className="w-16 h-16 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center text-2xl font-bold text-blue-700 flex-shrink-0">
+                        {expert.positioning?.[0]?.toUpperCase() || 'E'}
+                      </div>
+                      
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            {index === 0 && (
+                              <Badge className="mb-2 bg-blue-600">
+                                <Sparkles className="w-3 h-3 mr-1" />
+                                Best Match
+                              </Badge>
+                            )}
+                            <h3 className="text-xl font-bold text-slate-900">
+                              {expert.positioning}
+                            </h3>
+                          </div>
+                        </div>
+
+                        <p className="text-slate-600 mb-4 line-clamp-2">
+                          {expert.bio}
+                        </p>
+
+                        <div className="flex flex-wrap gap-2 mb-4">
+                          {expert.expertise_areas?.slice(0, 4).map((area, i) => (
+                            <Badge key={i} variant="outline" className="text-xs">
+                              {area}
+                            </Badge>
+                          ))}
+                        </div>
+
+                        {expert.match_reason && (
+                          <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+                            <p className="text-sm text-green-800">
+                              <strong>Why this expert:</strong> {expert.match_reason}
+                            </p>
+                          </div>
+                        )}
+
+                        <div className="flex items-center gap-4 text-sm text-slate-600 mb-4">
+                          <div className="flex items-center gap-1">
+                            <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+                            <span className="font-medium">
+                              {expert.average_rating > 0 ? expert.average_rating.toFixed(1) : 'New'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                            <span>{expert.total_sessions || 0} sessions</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-4 h-4" />
+                            <span>
+                              {expert.years_experience || '5+'} years exp.
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-4 border-t border-slate-200">
+                          <div>
+                            <p className="text-2xl font-bold text-slate-900">
+                              £{session.duration_minutes === 10 ? expert.rate_10min : expert.rate_20min}
+                            </p>
+                            <p className="text-sm text-slate-500">
+                              for {session.duration_minutes} minutes
+                            </p>
+                          </div>
+                          <Button className="bg-blue-600 hover:bg-blue-700">
+                            Select Expert
+                            <ArrowLeft className="w-4 h-4 ml-2 rotate-180" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+
+          <div className="space-y-6">
+            <Card className="shadow-lg border-0 sticky top-6">
+              <CardHeader>
+                <CardTitle className="text-lg">Your Session</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <p className="text-sm text-slate-500 mb-1">Problem</p>
+                  <p className="font-medium text-slate-900">{session.problem_title}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500 mb-1">Category</p>
+                  <Badge variant="outline">{session.problem_category}</Badge>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500 mb-1">Duration</p>
+                  <p className="font-medium text-slate-900">{session.duration_minutes} minutes</p>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500 mb-1">Urgency</p>
+                  <Badge variant="outline" className="capitalize">
+                    {session.urgency.replace('_', ' ')}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-lg border-0 bg-gradient-to-br from-amber-50 to-orange-50">
+              <CardContent className="p-6">
+                <div className="flex items-start gap-2 mb-3">
+                  <Sparkles className="w-5 h-5 text-amber-600 mt-0.5" />
+                  <div>
+                    <h3 className="font-semibold text-slate-900 mb-2">Not sure who to pick?</h3>
+                    <p className="text-sm text-slate-700 mb-3">
+                      We recommend the "Best Match" expert — our AI has ranked them based on your specific problem.
+                    </p>
+                    <p className="text-xs text-slate-600">
+                      All experts are vetted and rated by previous users.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

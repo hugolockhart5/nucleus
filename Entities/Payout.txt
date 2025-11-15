@@ -1,0 +1,49 @@
+{
+  "name": "Payout",
+  "type": "object",
+  "properties": {
+    "expert_id": {
+      "type": "string",
+      "description": "Expert receiving payout"
+    },
+    "period_start": {
+      "type": "string",
+      "format": "date"
+    },
+    "period_end": {
+      "type": "string",
+      "format": "date"
+    },
+    "total_sessions": {
+      "type": "number"
+    },
+    "total_amount_gbp": {
+      "type": "number"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "processing",
+        "completed",
+        "failed"
+      ],
+      "default": "pending"
+    },
+    "stripe_transfer_id": {
+      "type": "string"
+    },
+    "session_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Sessions included in this payout"
+    }
+  },
+  "required": [
+    "expert_id",
+    "period_start",
+    "period_end"
+  ]
+}

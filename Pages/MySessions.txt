@@ -1,0 +1,231 @@
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { base44 } from "@/api/base44Client";
+import { useQuery } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { 
+  Calendar,
+  Clock,
+  Video,
+  FileText,
+  Plus,
+  Star,
+  CheckCircle,
+  ArrowRight,
+  Loader2
+} from "lucide-react";
+import { format, isPast, isFuture } from "date-fns";
+
+export default function MySessions() {
+  const navigate = useNavigate();
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const currentUser = await base44.auth.me();
+        setUser(currentUser);
+      } catch (error) {
+        base44.auth.redirectToLogin(createPageUrl("MySessions"));
+      }
+    };
+    loadUser();
+  }, []);
+
+  const { data: sessions, isLoading } = useQuery({
+    queryKey: ['mySessions', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const allSessions = await base44.entities.Session.filter({ buyer_id: user.id }, '-scheduled_time');
+      
+      const sessionsWithExperts = await Promise.all(
+        allSessions.map(async (session) => {
+          if (session.expert_id) {
+            const expertData = await base44.entities.Expert.filter({ id: session.expert_id });
+            return { ...session, expert: expertData[0] };
+          }
+          return session;
+        })
+      );
+      
+      return sessionsWithExperts;
+    },
+    enabled: !!user,
+    initialData: []
+  });
+
+  const upcomingSessions = sessions.filter(s => 
+    s.scheduled_time && isFuture(new Date(s.scheduled_time)) && s.status === 'scheduled'
+  );
+  
+  const pastSessions = sessions.filter(s => 
+    s.scheduled_time && isPast(new Date(s.scheduled_time)) || s.status === 'completed'
+  );
+
+  const SessionCard = ({ session }) => {
+    const scheduledDate = session.scheduled_time ? new Date(session.scheduled_time) : null;
+    const isUpcoming = scheduledDate && isFuture(scheduledDate);
+
+    return (
+      <Card className="hover:shadow-lg transition-shadow border-0 shadow-md">
+        <CardContent className="p-6">
+          <div className="flex justify-between items-start mb-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-2">
+                <Badge variant={isUpcoming ? "default" : "outline"} className={isUpcoming ? "bg-blue-600" : ""}>
+                  {session.status}
+                </Badge>
+                <Badge variant="outline">{session.problem_category}</Badge>
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 mb-1">
+                {session.problem_title}
+              </h3>
+              {session.expert && (
+                <p className="text-sm text-slate-600">
+                  with {session.expert.positioning}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {scheduledDate && (
+            <div className="flex items-center gap-4 text-sm text-slate-600 mb-4">
+              <div className="flex items-center gap-1">
+                <Calendar className="w-4 h-4" />
+                <span>{format(scheduledDate, 'MMM d, yyyy')}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Clock className="w-4 h-4" />
+                <span>{format(scheduledDate, 'h:mm a')}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Video className="w-4 h-4" />
+                <span>{session.duration_minutes}min</span>
+              </div>
+            </div>
+          )}
+
+          {!isUpcoming && session.ai_summary && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle className="w-4 h-4 text-green-600" />
+                <span className="text-sm font-medium text-green-900">Summary Available</span>
+              </div>
+              <p className="text-sm text-slate-700 line-clamp-2">
+                {session.ai_summary}
+              </p>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between pt-4 border-t">
+            <div>
+              {session.buyer_rating && (
+                <div className="flex items-center gap-1 text-sm">
+                  <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+                  <span className="font-medium">{session.buyer_rating}/5</span>
+                </div>
+              )}
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => navigate(createPageUrl("SessionDetail"), { state: { sessionId: session.id } })}
+            >
+              View Details
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  if (!user || isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-12 h-12 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 max-w-7xl mx-auto">
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900 mb-2">My Sessions</h1>
+          <p className="text-slate-600">
+            View and manage your expert calls
+          </p>
+        </div>
+        <Button
+          onClick={() => navigate(createPageUrl("Home"))}
+          className="bg-blue-600 hover:bg-blue-700"
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Book New Session
+        </Button>
+      </div>
+
+      <Tabs defaultValue="upcoming" className="space-y-6">
+        <TabsList className="bg-white border shadow-sm">
+          <TabsTrigger value="upcoming" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700">
+            Upcoming ({upcomingSessions.length})
+          </TabsTrigger>
+          <TabsTrigger value="past" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700">
+            Past ({pastSessions.length})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="upcoming" className="space-y-4">
+          {upcomingSessions.length === 0 ? (
+            <Card className="border-0 shadow-lg">
+              <CardContent className="p-12 text-center">
+                <Calendar className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-slate-900 mb-2">
+                  No upcoming sessions
+                </h3>
+                <p className="text-slate-600 mb-6">
+                  Book your first session and get expert guidance on your next decision
+                </p>
+                <Button
+                  onClick={() => navigate(createPageUrl("Home"))}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  Find an Expert
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            upcomingSessions.map(session => (
+              <SessionCard key={session.id} session={session} />
+            ))
+          )}
+        </TabsContent>
+
+        <TabsContent value="past" className="space-y-4">
+          {pastSessions.length === 0 ? (
+            <Card className="border-0 shadow-lg">
+              <CardContent className="p-12 text-center">
+                <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-slate-900 mb-2">
+                  No past sessions yet
+                </h3>
+                <p className="text-slate-600">
+                  Your completed sessions will appear here
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            pastSessions.map(session => (
+              <SessionCard key={session.id} session={session} />
+            ))
+          )}
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
